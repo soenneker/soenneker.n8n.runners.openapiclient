@@ -21,10 +21,10 @@ public static class Startup
     public static IServiceCollection SetupIoC(this IServiceCollection services)
     {
         services.AddHostedService<ConsoleHostedService>()
-                .AddScoped<IFileOperationsUtil, FileOperationsUtil>()
-                .AddRunnersManagerAsScoped()
-                .AddPlaywrightInstallationUtilAsScoped()
-                .AddKiotaUtilAsScoped();
+                .AddSingleton<IFileOperationsUtil, FileOperationsUtil>()
+                .AddRunnersManagerAsSingleton()
+                .AddPlaywrightInstallationUtilAsSingleton()
+                .AddKiotaUtilAsSingleton();
 
         return services;
     }
