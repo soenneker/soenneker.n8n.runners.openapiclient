@@ -28,6 +28,6 @@
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2069" />
         <PackageReference Include="Soenneker.Playwrights.Extensions.Stealth" Version="4.0.70" />
         <PackageReference Include="Soenneker.Playwrights.Installation" Version="4.0.9" />
-        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1577" />
+        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1582" />
     </ItemGroup>
 </Project>
