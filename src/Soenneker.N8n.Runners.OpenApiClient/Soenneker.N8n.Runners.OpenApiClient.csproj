@@ -27,7 +27,7 @@
         <PackageReference Include="Soenneker.Kiota.Util" Version="4.0.23" />
         <PackageReference Include="Soenneker.Managers.Runners" Version="4.0.2105" />
         <PackageReference Include="Soenneker.Playwrights.Extensions.Stealth" Version="4.0.77" />
-        <PackageReference Include="Soenneker.Playwrights.Installation" Version="4.0.29" />
+        <PackageReference Include="Soenneker.Playwrights.Installation" Version="4.0.34" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1592" />
     </ItemGroup>
 </Project>
