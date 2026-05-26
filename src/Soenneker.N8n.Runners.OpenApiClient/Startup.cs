@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Soenneker.Kiota.Util.Registrars;
 using Soenneker.Managers.Runners.Registrars;
+using Soenneker.OpenApi.Fixer.Registrars;
 using Soenneker.N8n.Runners.OpenApiClient.Utils;
 using Soenneker.N8n.Runners.OpenApiClient.Utils.Abstract;
 using Soenneker.Playwrights.Installation.Registrars;
@@ -23,6 +24,7 @@ public static class Startup
         services.AddHostedService<ConsoleHostedService>()
                 .AddSingleton<IFileOperationsUtil, FileOperationsUtil>()
                 .AddRunnersManagerAsSingleton()
+                .AddOpenApiFixerAsSingleton()
                 .AddPlaywrightInstallationUtilAsSingleton()
                 .AddKiotaUtilAsSingleton();
 

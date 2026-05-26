@@ -16,6 +16,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Soenneker.Extensions.ValueTask;
 using Soenneker.Kiota.Util.Abstract;
+using Soenneker.OpenApi.Fixer.Abstract;
 using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
 using System.Collections.Generic;
@@ -30,18 +31,20 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private readonly IGitUtil _gitUtil;
     private readonly IDotnetUtil _dotnetUtil;
     private readonly IKiotaUtil _kiotaUtil;
+    private readonly IOpenApiFixer _openApiFixer;
     private readonly IPlaywrightInstallationUtil _playwrightInstallationUtil;
     private readonly IFileUtil _fileUtil;
     private readonly IDirectoryUtil _directoryUtil;
 
     public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IConfiguration configuration, IGitUtil gitUtil, IDotnetUtil dotnetUtil,
-        IPlaywrightInstallationUtil playwrightInstallationUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IKiotaUtil kiotaUtil)
+        IPlaywrightInstallationUtil playwrightInstallationUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IKiotaUtil kiotaUtil, IOpenApiFixer openApiFixer)
     {
         _logger = logger;
         _configuration = configuration;
         _gitUtil = gitUtil;
         _dotnetUtil = dotnetUtil;
         _kiotaUtil = kiotaUtil;
+        _openApiFixer = openApiFixer;
         _playwrightInstallationUtil = playwrightInstallationUtil;
         _fileUtil = fileUtil;
         _directoryUtil = directoryUtil;
@@ -53,11 +56,15 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         string targetFilePath = Path.Combine(gitDirectory, "openapi.json");
 
+        string fixedFilePath = Path.Combine(gitDirectory, "fixed.json");
+
         await _fileUtil.DeleteIfExists(targetFilePath, cancellationToken: cancellationToken);
 
         string openApiDocumentUrl = _configuration["N8n:ClientGenerationUrl"] ?? "https://docs.n8n.io/api/api-reference/";
 
         string filePath = await DownloadOpenApiDocument(openApiDocumentUrl, targetFilePath, cancellationToken);
+        await _openApiFixer.Fix(targetFilePath, fixedFilePath, cancellationToken);
+
 
         await _kiotaUtil.EnsureInstalled(cancellationToken);
 
@@ -65,7 +72,7 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
 
         await DeleteAllExceptCsproj(srcDirectory, cancellationToken);
 
-        await _kiotaUtil.Generate(filePath, "N8nOpenApiClient", Constants.Library, gitDirectory, cancellationToken).NoSync();
+        await _kiotaUtil.Generate(fixedFilePath, "N8nOpenApiClient", Constants.Library, gitDirectory, cancellationToken).NoSync();
 
         await BuildAndPush(gitDirectory, cancellationToken).NoSync();
     }
