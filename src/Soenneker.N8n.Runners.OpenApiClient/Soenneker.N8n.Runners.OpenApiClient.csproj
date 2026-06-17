@@ -29,6 +29,6 @@
         <PackageReference Include="Soenneker.OpenApi.Fixer" Version="4.0.260" />
         <PackageReference Include="Soenneker.Playwrights.Extensions.Stealth" Version="4.0.91" />
         <PackageReference Include="Soenneker.Playwrights.Installation" Version="4.0.56" />
-        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1618" />
+        <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1621" />
     </ItemGroup>
 </Project>
