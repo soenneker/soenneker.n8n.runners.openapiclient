@@ -4,7 +4,8 @@ using Soenneker.Managers.Runners.Registrars;
 using Soenneker.OpenApi.Fixer.Registrars;
 using Soenneker.N8n.Runners.OpenApiClient.Utils;
 using Soenneker.N8n.Runners.OpenApiClient.Utils.Abstract;
-using Soenneker.Playwrights.Installation.Registrars;
+using Soenneker.Utils.File.Download.Registrars;
+using Soenneker.Utils.Yaml.Registrars;
 
 namespace Soenneker.N8n.Runners.OpenApiClient;
 
@@ -34,7 +35,8 @@ public static class Startup
                 .AddSingleton<IFileOperationsUtil, FileOperationsUtil>()
                 .AddRunnersManagerAsSingleton()
                 .AddOpenApiFixerAsSingleton()
-                .AddPlaywrightInstallationUtilAsSingleton()
+                .AddYamlUtilAsSingleton()
+                .AddFileDownloadUtilAsSingleton()
                 .AddKiotaUtilAsSingleton();
 
         return services;

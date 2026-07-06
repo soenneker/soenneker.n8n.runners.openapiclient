@@ -1,14 +1,10 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Playwright;
 using Soenneker.Extensions.String;
-using Soenneker.Playwrights.Extensions.Stealth;
-using Soenneker.Playwrights.Installation.Abstract;
 using Soenneker.Git.Util.Abstract;
 using Soenneker.N8n.Runners.OpenApiClient.Utils.Abstract;
 using Soenneker.Utils.Dotnet.Abstract;
 using Soenneker.Utils.Environment;
-using Soenneker.Utils.Process.Abstract;
 using System;
 using System.IO;
 using System.Linq;
@@ -19,6 +15,8 @@ using Soenneker.Kiota.Util.Abstract;
 using Soenneker.OpenApi.Fixer.Abstract;
 using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
+using Soenneker.Utils.File.Download.Abstract;
+using Soenneker.Utils.Yaml.Abstract;
 using System.Collections.Generic;
 
 namespace Soenneker.N8n.Runners.OpenApiClient.Utils;
@@ -32,12 +30,13 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
     private readonly IDotnetUtil _dotnetUtil;
     private readonly IKiotaUtil _kiotaUtil;
     private readonly IOpenApiFixer _openApiFixer;
-    private readonly IPlaywrightInstallationUtil _playwrightInstallationUtil;
+    private readonly IFileDownloadUtil _fileDownloadUtil;
     private readonly IFileUtil _fileUtil;
     private readonly IDirectoryUtil _directoryUtil;
+    private readonly IYamlUtil _yamlUtil;
 
     public FileOperationsUtil(ILogger<FileOperationsUtil> logger, IConfiguration configuration, IGitUtil gitUtil, IDotnetUtil dotnetUtil,
-        IPlaywrightInstallationUtil playwrightInstallationUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IKiotaUtil kiotaUtil, IOpenApiFixer openApiFixer)
+        IFileDownloadUtil fileDownloadUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IKiotaUtil kiotaUtil, IYamlUtil yamlUtil, IOpenApiFixer openApiFixer)
     {
         _logger = logger;
         _configuration = configuration;
@@ -45,25 +44,30 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         _dotnetUtil = dotnetUtil;
         _kiotaUtil = kiotaUtil;
         _openApiFixer = openApiFixer;
-        _playwrightInstallationUtil = playwrightInstallationUtil;
+        _fileDownloadUtil = fileDownloadUtil;
         _fileUtil = fileUtil;
         _directoryUtil = directoryUtil;
+        _yamlUtil = yamlUtil;
     }
 
     public async ValueTask Process(CancellationToken cancellationToken = default)
     {
         string gitDirectory = await _gitUtil.CloneToTempDirectory($"https://github.com/soenneker/{Constants.Library.ToLowerInvariantFast()}", cancellationToken: cancellationToken);
 
-        string targetFilePath = Path.Combine(gitDirectory, "openapi.json");
+        string targetFilePath = Path.Combine(gitDirectory, "openapi.yml");
+        string jsonFilePath = Path.Combine(gitDirectory, "openapi.json");
 
         string fixedFilePath = Path.Combine(gitDirectory, "fixed.json");
 
         await _fileUtil.DeleteIfExists(targetFilePath, cancellationToken: cancellationToken);
+        await _fileUtil.DeleteIfExists(jsonFilePath, cancellationToken: cancellationToken);
 
-        string openApiDocumentUrl = _configuration["N8n:ClientGenerationUrl"] ?? "https://docs.n8n.io/api/api-reference/";
+        string openApiDocumentUrl = _configuration["N8n:ClientGenerationUrl"] ?? "https://internal.users.n8n.cloud/api/v1/openapi.yml";
 
-        string filePath = await DownloadOpenApiDocument(openApiDocumentUrl, targetFilePath, cancellationToken);
-        await _openApiFixer.Fix(targetFilePath, fixedFilePath, cancellationToken);
+        string? filePath = await _fileDownloadUtil.Download(openApiDocumentUrl,
+            targetFilePath, fileExtension: ".yml", cancellationToken: cancellationToken);
+        await _yamlUtil.SaveAsJson(filePath ?? targetFilePath, jsonFilePath, true, cancellationToken);
+        await _openApiFixer.Fix(jsonFilePath, fixedFilePath, cancellationToken);
 
 
         await _kiotaUtil.EnsureInstalled(cancellationToken);
@@ -75,100 +79,6 @@ public sealed class FileOperationsUtil : IFileOperationsUtil
         await _kiotaUtil.Generate(fixedFilePath, "N8nOpenApiClient", Constants.Library, gitDirectory, cancellationToken).NoSync();
 
         await BuildAndPush(gitDirectory, cancellationToken).NoSync();
-    }
-
-    private async ValueTask<string> DownloadOpenApiDocument(string openApiDocumentUrl, string targetFilePath, CancellationToken cancellationToken)
-    {
-        await _playwrightInstallationUtil.EnsureInstalled(cancellationToken).NoSync();
-
-        using IPlaywright playwright = await Playwright.CreateAsync();
-        await using IBrowser browser = await playwright.LaunchStealthChromium(new BrowserTypeLaunchOptions
-        {
-            Headless = true
-        });
-
-        await using IBrowserContext context = await browser.CreateStealthContext(new BrowserNewContextOptions
-        {
-            AcceptDownloads = true
-        }).NoSync();
-
-        IPage page = await context.NewPageAsync();
-        page.SetDefaultTimeout(60000);
-        page.SetDefaultNavigationTimeout(60000);
-
-        await page.AddInitScriptAsync("""
-            (() => {
-                const originalCreateObjectURL = URL.createObjectURL.bind(URL);
-
-                window.__soennekerLatestBlobUrl = null;
-
-                URL.createObjectURL = function(blob) {
-                    const url = originalCreateObjectURL(blob);
-                    window.__soennekerLatestBlobUrl = url;
-                    return url;
-                };
-            })();
-            """);
-
-        _logger.LogInformation("Navigating to n8n API reference page: {Url}", openApiDocumentUrl);
-
-        await page.GotoAsync(openApiDocumentUrl, new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.Load
-        });
-
-        _logger.LogInformation("Waiting for OpenAPI download button...");
-
-        ILocator downloadButton = page.Locator("div.download-container.download-both button.download-button").Nth(0);
-        await downloadButton.WaitForAsync(new LocatorWaitForOptions
-        {
-            State = WaitForSelectorState.Visible
-        });
-
-        await downloadButton.ScrollIntoViewIfNeededAsync();
-
-        _logger.LogInformation("Clicking JSON OpenAPI download button...");
-
-        await page.EvaluateAsync("""
-            () => {
-                window.__soennekerLatestBlobUrl = null;
-            }
-            """);
-
-        await downloadButton.ClickAsync(new LocatorClickOptions
-        {
-            Force = true
-        });
-
-        _logger.LogInformation("Waiting for generated OpenAPI blob...");
-
-        await page.WaitForFunctionAsync("""
-            () => typeof window.__soennekerLatestBlobUrl === 'string' && window.__soennekerLatestBlobUrl.startsWith('blob:')
-            """, null, new PageWaitForFunctionOptions
-        {
-            Timeout = 30000
-        });
-
-        string? json = await page.EvaluateAsync<string>("""
-            async () => {
-                const blobUrl = window.__soennekerLatestBlobUrl;
-
-                if (!blobUrl)
-                    return null;
-
-                const response = await fetch(blobUrl);
-                return await response.text();
-            }
-            """);
-
-        if (string.IsNullOrWhiteSpace(json))
-            throw new Exception("OpenAPI blob was generated, but no JSON content could be read from it.");
-
-        await File.WriteAllTextAsync(targetFilePath, json, cancellationToken);
-
-        _logger.LogInformation("Saved OpenAPI document to {TargetFilePath}", targetFilePath);
-
-        return targetFilePath;
     }
 
     /// <summary>
